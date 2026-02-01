@@ -7,8 +7,8 @@ from gymnasium import spaces
 import optparse
 import pickle
 
-import memory as mem
-from feedforward import Feedforward
+import sac.memory as mem
+from sac.feedforward import Feedforward
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 torch.set_num_threads(1)
