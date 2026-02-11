@@ -1,6 +1,6 @@
 import torch
-from feedforward import Feedforward
-from memory import Memory
+from sac.feedforward import Feedforward
+from sac.memory import Memory
 import numpy as np
 
 
@@ -8,18 +8,20 @@ class SAC:
     """Soft Actor-Critic Agent
 
     Parameters:
-        Q function
-            Q optimizer
-        policy
-            policy optimizer
-        alpha
-        tau
-        gamma
-        updates per step
+        Q1 - QFunction, trainable Q network with optimizer
+        Q2 - QFunction, trainable Q network with optimizer
+        policy - TanhGaussianPolicy, trainable policy network with optimizer
+        alpha - entropy regularization coefficient
+        gamma - discount
+        buffer - Memory
+        batch_size - batch size for updates
+        fit_steps - number of updates per train call
 
     Interface:
         act(obs) - produce action
-        train
+        train(fit_steps) - perform update step
+        state - get model parameters
+        restore_state - restore model from state
 
 
     NOTE: Code written by hand based on knowledge from class, papers, and reading online resources.
@@ -29,31 +31,64 @@ class SAC:
     Sources:
     1. https://spinningup.openai.com/en/latest/algorithms/sac.html
     2. https://arxiv.org/pdf/1801.01290
+    3. https://github.com/openai/spinningup/issues/279 (debugging)
     """
 
 
-    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, fit_steps, batch_size):
+    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size, fit_steps):
         self.Q1 = Q1
         self.Q2 = Q2
         self.policy = policy
         self.alpha = alpha
         self.gamma = gamma
         self.buffer = buffer
-        self.fit_steps = fit_steps
         self.batch_size = batch_size
+        self.fit_steps = fit_steps
 
 
     def act(self, obs):
+        """Return the action taken by the agent.
+
+        Params:
+            obs - the state observed by the agent
+
+        Returns: the action taken in the given state
+        """
         with torch.no_grad():
-            actions = self.policy.sample(torch.tensor(obs[None]))
+            actions = self.policy.act(torch.tensor(obs[None]))
             return actions[0].detach().numpy()
     
     def state(self):
-        return (self.Q1.state_dict(), self.Q2.state_dict(), self.policy.state_dict())
+        """Return the state of the agent for saving.
+
+        Returns: (Q1 state, Q2 state, Policy state) - tuple of dicts
+        """
+        return (self.Q1.state(), self.Q2.state(), self.policy.state())
+
+    def restore_state(self, state):
+        """Restore a model from a state.
+
+        Params: 
+            state (Q1 state, Q2 state, Policy state) - tuple of dicts
+        """
+        self.Q1.restore_state(state[0])
+        self.Q2.restore_state(state[1])
+        self.policy.restore_state(state[2])
     
     def get_batch(self):
+        """Sample a batch from memory and convert to tensors.
+
+        Returns: (s, a, rew, s_prime, done) - tensors of shape (self.batch_size, ...)
+            s - states
+            a - actions
+            rew - rewards
+            s_prime - next states
+            done - truncation flag
+        """
         to_torch = lambda x: torch.from_numpy(x.astype(np.float32))
+        
         data=self.buffer.sample(batch=self.batch_size)
+        
         s = to_torch(np.stack(data[:,0])) # s_t
         a = to_torch(np.stack(data[:,1])) # a_t
         rew = to_torch(np.stack(data[:,2])[:,None]) # rew  (batchsize,1)
@@ -62,23 +97,25 @@ class SAC:
         return s, a, rew, s_prime, done
 
     def train(self):
+        losses = []
         for i in range(self.fit_steps):
             state, action, reward, next_state, done = self.get_batch()
-            next_action = self.policy.sample(state)
-            t = self.compute_t(next_state, next_action)
+            next_action, logprob = self.policy.sample(state)
+            t, q_target = self.compute_t(next_state, next_action, logprob)
             target = self.compute_target(t, reward, done)
-            self.Q1.fit(state, action, target)
-            self.Q2.fit(state, action, target.clone())
-            self.policy.step(t)
+            q1_loss = self.Q1.fit(state.detach(), action.detach(), target.detach())
+            q2_loss = self.Q2.fit(state.detach(), action.detach(), target.detach())
+            policy_loss = self.policy.step(t)
             self.update_targets()
+            losses.append((q1_loss, q2_loss, policy_loss, torch.mean(logprob.detach())))
+        return losses
 
-    def compute_t(self, s_p, a_p):
-        logprob = self.policy.logprob(s_p, a_p)
+    def compute_t(self, s_p, a_p, logprob):
         q1 = self.Q1.target_val(s_p, a_p) 
         q2 = self.Q2.target_val(s_p, a_p)
-        t1 = q1 - self.alpha * logprob
-        t2 = q2 - self.alpha * logprob
-        return torch.min(t1, t2)
+        q_target = torch.min(q1, q2) 
+        t = q_target - self.alpha * logprob
+        return t, q_target
     
     def compute_target(self, t, r, d):
         y = r + self.gamma * (1-d) * t
@@ -92,7 +129,7 @@ class SAC:
         self.buffer.add_transition(trans)
     
 
-class QFunction(torch.nn.Module):
+class QFunction:
     def __init__(self, base, target, optim, loss, tau):
         super().__init__()
         # TODO: Setup network with right input and output size (using super().__init__)
@@ -106,7 +143,7 @@ class QFunction(torch.nn.Module):
         self.loss = loss
 
     def fit(self, observations, actions, targets): # all arguments should be torch tensors
-        self.train() # put model in training mode
+        self.model.train() # put model in training mode
         self.optimizer.zero_grad()
         # Forward pass
 
@@ -118,6 +155,13 @@ class QFunction(torch.nn.Module):
         loss.backward()
         self.optimizer.step()
         return loss.item()
+
+    def state(self):
+        return (self.model.state_dict(), self.target.state_dict())
+
+    def restore_state(self, state):
+        self.model.load_state_dict(state[0])
+        self.target.load_state_dict(state[1])
     
     def target_val(self, observations, actions):
         # TODO: implement the forward pass.
@@ -139,24 +183,26 @@ class QFunction(torch.nn.Module):
 
 class TanhGaussianPolicy:
 
-    def __init__(self, base_net, optim, action_space):
+    def __init__(self, base_net, optim, action_space, exp_steps, eps):
         self.base_net = base_net
         self.optimizer = optim
         self.action_space = action_space
         self.act_dim = self.action_space.shape[0]
         self.act_scale = torch.Tensor((self.action_space.high - self.action_space.low) * 0.5)
         self.act_offset = torch.Tensor((self.action_space.high + self.action_space.low) * 0.5)
+        self.exp_steps = exp_steps
+        self.t = 0
+        self.eps = eps
 
     def forward(self, state):
         output = self.base_net(state)
         mu = output[:, :self.act_dim]
-        logsig = output[:, self.act_dim:]
+        logsig = torch.clip(output[:, self.act_dim:], -20, 2)
         return mu, logsig
 
     def step(self, t):
-        self.train() # put model in training mode
+        self.base_net.train() # put model in training mode
         self.optimizer.zero_grad()
-        # Forward pass
 
         # Compute Loss
         loss = -torch.mean(t)
@@ -165,20 +211,37 @@ class TanhGaussianPolicy:
         loss.backward()
         self.optimizer.step()
         return loss.item()
+
+    def state(self):
+        return self.base_net.state_dict()
+
+    def restore_state(self, state):
+        self.base_net.load_state_dict(state)
     
     def scale(self, act):
         return self.act_scale * act + self.act_offset
 
+    def act(self, state):
+        if self.t < self.exp_steps:
+            action = torch.tensor(np.random.uniform(self.action_space.low, self.action_space.high)[None])
+        else:
+            action, _ = self.sample(state)
+        self.t += 1
+        return action
+
     def sample(self, state):
+        """https://github.com/openai/spinningup/issues/279"""
+
+        # Sample actions
         eps = torch.randn(state.shape[0], self.act_dim)
         mu, logsig = self.forward(state)
-        raw_act = torch.tanh(mu + torch.exp(logsig) * eps)
-        return self.scale(raw_act)
+        transformed = mu + torch.exp(logsig) * eps
+        raw_act = torch.tanh(transformed)
+        actions = self.scale(raw_act)
 
-    def logprob(self, state, action):
-        mu, logsig = self.forward(state)
-        inv_scaled = (action - self.act_offset) / self.act_scale
-        x = torch.atanh(inv_scaled)
-        lognorm = -0.5 * torch.log(2*torch.tensor(torch.pi)) - logsig - 0.5 * torch.exp(-2 * logsig) * (x - mu) ** 2
-        logprob = lognorm - torch.log(self.act_scale) - torch.log(1 - inv_scaled ** 2)
-        return logprob
+        # Compute log probs
+        normal_log_probs = -0.5 * np.log(2 * np.pi) - logsig - 0.5 * eps ** 2
+        transform_log_probs = -torch.log(self.act_scale[None]) - 2 * (np.log(2) - transformed - torch.nn.functional.softplus(-2 * transformed))
+        all_log_probs = normal_log_probs + transform_log_probs
+        log_probs = torch.sum(all_log_probs, axis=-1, keepdims=True)
+        return actions, log_probs
