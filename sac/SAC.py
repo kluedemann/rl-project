@@ -183,7 +183,7 @@ class QFunction:
 
 class TanhGaussianPolicy:
 
-    def __init__(self, base_net, optim, action_space, exp_steps, eps):
+    def __init__(self, base_net, optim, action_space, exp_steps):
         self.base_net = base_net
         self.optimizer = optim
         self.action_space = action_space
@@ -192,7 +192,6 @@ class TanhGaussianPolicy:
         self.act_offset = torch.Tensor((self.action_space.high + self.action_space.low) * 0.5)
         self.exp_steps = exp_steps
         self.t = 0
-        self.eps = eps
 
     def forward(self, state):
         output = self.base_net(state)
