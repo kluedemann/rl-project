@@ -30,10 +30,10 @@ def plot_policy_loss(policy_loss, plot_path, N=50):
     plt.show()
 
 def plot_entropy(logprobs, plot_path, N=50):
-    plt.plot(logprobs, alpha=0.4, label="Logprobs")
-    plt.plot(running_mean(logprobs, N), color="tab:blue", label="Mean N=50")
+    plt.plot(-logprobs, alpha=0.4, label="Negative Mean Logprobs")
+    plt.plot(running_mean(-logprobs, N), color="tab:blue", label="Mean N=50")
     
-    plt.ylabel("Mean Logprobs")
+    plt.ylabel("Empirical Entropy (nats)")
     plt.xlabel("Episode")
     plt.legend()
     plt.title("Policy Entropy by Training Episode")

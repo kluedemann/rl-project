@@ -55,7 +55,7 @@ class SAC:
         Returns: the action taken in the given state
         """
         with torch.no_grad():
-            actions = self.policy.act(torch.tensor(obs[None]))
+            actions = self.policy.act(torch.tensor(obs[None]).float())
             return actions[0].detach().numpy()
     
     def state(self):

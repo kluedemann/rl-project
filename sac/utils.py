@@ -13,7 +13,7 @@ SB3_PARAMS = {
     "batch_size": 256,
     "gamma": 0.99,
     "alpha": 0.1,
-    "loss": torch.nn.MSELoss(),
+    "loss": "MSE",
     "exp_steps": 100
 }
 
@@ -25,12 +25,18 @@ SPINNING_UP_PARAMS = {
     "batch_size": 100,
     "gamma": 0.99,
     "alpha": 0.2,
-    "loss": torch.nn.MSELoss(),
+    "loss": "MSE",
     "exp_steps": 10000
+}
+
+LOSSES = {
+    "MSE": torch.nn.MSELoss()
 }
 
 
 def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, exp_steps, alpha, gamma, batch_size, fit_steps):
+    loss_f = LOSSES[loss]
+    
     observation_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     
@@ -38,12 +44,12 @@ def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, exp_steps, alph
     Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q1_optim = torch.optim.Adam(Q1_base.parameters(),
                                             lr=lr_critic)
-    Q1 = QFunction(Q1_base, Q1_target, Q1_optim, loss, tau)
+    Q1 = QFunction(Q1_base, Q1_target, Q1_optim, loss_f, tau)
     
     Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q2_optim = torch.optim.Adam(Q2_base.parameters(), lr=lr_critic)
-    Q2 = QFunction(Q2_base, Q2_target, Q2_optim, loss, tau)
+    Q2 = QFunction(Q2_base, Q2_target, Q2_optim, loss_f, tau)
     
     policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
@@ -81,7 +87,7 @@ def train_agent(agent, env, i_episode, new_episodes, max_timesteps, filepath, lo
     for i in range(new_episodes):
         ob, _info = env.reset()
         total_reward=0
-        e_losses = []
+        # e_losses = []
         for t in range(max_timesteps):
             done = False
             a = agent.act(ob)
@@ -90,14 +96,15 @@ def train_agent(agent, env, i_episode, new_episodes, max_timesteps, filepath, lo
             agent.store_transition((ob, a, reward, ob_new, done))
             if (t+1) % train_interval == 0: 
                 loss = agent.train()
-                e_losses.append(loss)
+                # e_losses.append(loss)
+                losses.append(loss)
             ob=ob_new
             if done or trunc: break
         i_episode += 1
         # loss = agent.train()
         # losses.append(loss)
         # print(t, np.asarray(e_losses))
-        losses.append(np.mean(e_losses, axis=(0,1)))
+        # losses.append(np.mean(e_losses, axis=(0,1)))
 
         rewards.append(total_reward)
         lengths.append(t+1)

@@ -4,7 +4,7 @@ numpy
 box2d-py
 swig
 pygame
-gymnasium
+gymnasium[mujoco]
 tensorboardx
 notebook
 jupyterlab
