@@ -35,7 +35,7 @@ class SAC:
     """
 
 
-    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size, fit_steps):
+    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size):
         self.Q1 = Q1
         self.Q2 = Q2
         self.policy = policy
@@ -43,7 +43,6 @@ class SAC:
         self.gamma = gamma
         self.buffer = buffer
         self.batch_size = batch_size
-        self.fit_steps = fit_steps
 
 
     def act(self, obs, noise_scale=1.):
@@ -97,18 +96,15 @@ class SAC:
         return s, a, rew, s_prime, done
 
     def train(self):
-        losses = []
-        for i in range(self.fit_steps):
-            state, action, reward, next_state, done = self.get_batch()
-            next_action, logprob = self.policy.sample(state)
-            t, q_target = self.compute_t(next_state, next_action, logprob)
-            target = self.compute_target(t, reward, done)
-            q1_loss = self.Q1.fit(state.detach(), action.detach(), target.detach())
-            q2_loss = self.Q2.fit(state.detach(), action.detach(), target.detach())
-            policy_loss = self.policy.step(t)
-            self.update_targets()
-            losses.append((q1_loss, q2_loss, policy_loss, torch.mean(logprob.detach())))
-        return losses
+        state, action, reward, next_state, done = self.get_batch()
+        next_action, logprob = self.policy.sample(state)
+        t, q_target = self.compute_t(next_state, next_action, logprob)
+        target = self.compute_target(t, reward, done)
+        q1_loss = self.Q1.fit(state.detach(), action.detach(), target.detach())
+        q2_loss = self.Q2.fit(state.detach(), action.detach(), target.detach())
+        policy_loss = self.policy.step(t)
+        self.update_targets()
+        return q1_loss, q2_loss, policy_loss, torch.mean(logprob.detach())
 
     def compute_t(self, s_p, a_p, logprob):
         q1 = self.Q1.target_val(s_p, a_p) 

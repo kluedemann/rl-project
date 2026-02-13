@@ -6,7 +6,7 @@ from sac.SAC import *
 import pickle
 
 SB3_PARAMS = {
-    "fit_steps": 1,
+    # "fit_steps": 1,
     "lr_actor": 3e-4,
     "lr_critic": 3e-4,
     "tau": 1-0.005,
@@ -18,7 +18,7 @@ SB3_PARAMS = {
 }
 
 SPINNING_UP_PARAMS = {
-    "fit_steps": 1,
+    # "fit_steps": 1,
     "lr_actor": 1e-3,
     "lr_critic": 1e-3,
     "tau": 0.995,
@@ -34,7 +34,7 @@ LOSSES = {
 }
 
 
-def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, fit_steps, action_bounds):
+def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds):
     loss_f = LOSSES[loss]
     
     observation_dim = env.observation_space.shape[0]
@@ -55,7 +55,7 @@ def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, b
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     buffer = Memory(int(1e6))
-    sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size, fit_steps=fit_steps)
+    sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size)
     return sac
 
 
