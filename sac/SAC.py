@@ -46,7 +46,7 @@ class SAC:
         self.fit_steps = fit_steps
 
 
-    def act(self, obs):
+    def act(self, obs, noise_scale=1.):
         """Return the action taken by the agent.
 
         Params:
@@ -55,7 +55,7 @@ class SAC:
         Returns: the action taken in the given state
         """
         with torch.no_grad():
-            actions = self.policy.act(torch.tensor(obs[None]).float())
+            actions = self.policy.act(torch.tensor(obs[None]).float(), noise_scale)
             return actions[0].detach().numpy()
     
     def state(self):
@@ -220,15 +220,15 @@ class TanhGaussianPolicy:
     def scale(self, act):
         return self.act_scale * act + self.act_offset
 
-    def act(self, state):
-        action, _ = self.sample(state)
+    def act(self, state, noise_scale=1.):
+        action, _ = self.sample(state, noise_scale)
         return action
 
-    def sample(self, state):
+    def sample(self, state, noise_scale=1.):
         """https://github.com/openai/spinningup/issues/279"""
 
         # Sample actions
-        eps = torch.randn(state.shape[0], self.act_dim)
+        eps = torch.randn(state.shape[0], self.act_dim) * noise_scale
         mu, logsig = self.forward(state)
         transformed = mu + torch.exp(logsig) * eps
         raw_act = torch.tanh(transformed)
