@@ -14,7 +14,7 @@ SB3_PARAMS = {
     "gamma": 0.99,
     "alpha": 0.1,
     "loss": "MSE",
-    "exp_steps": 100
+    # "exp_steps": 100
 }
 
 SPINNING_UP_PARAMS = {
@@ -26,7 +26,7 @@ SPINNING_UP_PARAMS = {
     "gamma": 0.99,
     "alpha": 0.2,
     "loss": "MSE",
-    "exp_steps": 10000
+    # "exp_steps": 10000
 }
 
 LOSSES = {
@@ -34,11 +34,11 @@ LOSSES = {
 }
 
 
-def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, exp_steps, alpha, gamma, batch_size, fit_steps):
+def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, fit_steps, action_bounds):
     loss_f = LOSSES[loss]
     
     observation_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
+    action_dim = action_bounds[0].shape[0]
     
     Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
@@ -53,7 +53,7 @@ def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, exp_steps, alph
     
     policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
-    policy = TanhGaussianPolicy(policy_base, policy_optim, env.action_space, exp_steps=exp_steps)
+    policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     buffer = Memory(int(1e6))
     sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size, fit_steps=fit_steps)
     return sac

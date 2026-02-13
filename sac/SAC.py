@@ -182,21 +182,21 @@ class QFunction:
     
 
 class TanhGaussianPolicy:
+    MAX_LOGSIG = 2
+    MIN_LOGSIG = -20
 
-    def __init__(self, base_net, optim, action_space, exp_steps):
+    def __init__(self, base_net, optim, action_bounds):
         self.base_net = base_net
         self.optimizer = optim
-        self.action_space = action_space
-        self.act_dim = self.action_space.shape[0]
-        self.act_scale = torch.Tensor((self.action_space.high - self.action_space.low) * 0.5)
-        self.act_offset = torch.Tensor((self.action_space.high + self.action_space.low) * 0.5)
-        self.exp_steps = exp_steps
-        self.t = 0
+        action_low, action_high = action_bounds
+        self.act_dim = action_low.shape[0]
+        self.act_scale = torch.Tensor((action_high - action_low) * 0.5)
+        self.act_offset = torch.Tensor((action_high + action_low) * 0.5)
 
     def forward(self, state):
         output = self.base_net(state)
         mu = output[:, :self.act_dim]
-        logsig = torch.clip(output[:, self.act_dim:], -20, 2)
+        logsig = torch.clip(output[:, self.act_dim:], TanhGaussianPolicy.MIN_LOGSIG, TanhGaussianPolicy.MAX_LOGSIG)
         return mu, logsig
 
     def step(self, t):
@@ -221,11 +221,7 @@ class TanhGaussianPolicy:
         return self.act_scale * act + self.act_offset
 
     def act(self, state):
-        if self.t < self.exp_steps:
-            action = torch.tensor(np.random.uniform(self.action_space.low, self.action_space.high)[None])
-        else:
-            action, _ = self.sample(state)
-        self.t += 1
+        action, _ = self.sample(state)
         return action
 
     def sample(self, state):
