@@ -4,6 +4,7 @@ from sac.memory import Memory
 import numpy as np
 
 
+
 class SAC:
     """Soft Actor-Critic Agent
 
@@ -35,7 +36,7 @@ class SAC:
     """
 
 
-    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size):
+    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size, obs_scale=1.):
         self.Q1 = Q1
         self.Q2 = Q2
         self.policy = policy
@@ -43,6 +44,7 @@ class SAC:
         self.gamma = gamma
         self.buffer = buffer
         self.batch_size = batch_size
+        self.obs_scale = obs_scale
 
 
     def act(self, obs, noise_scale=1.):
@@ -54,7 +56,8 @@ class SAC:
         Returns: the action taken in the given state
         """
         with torch.no_grad():
-            actions = self.policy.act(torch.tensor(obs[None]).float(), noise_scale)
+            scaled_obs = obs / self.obs_scale
+            actions = self.policy.act(torch.tensor(scaled_obs[None]).float(), noise_scale)
             return actions[0].detach().numpy()
     
     def state(self):
@@ -122,7 +125,9 @@ class SAC:
         self.Q2.polyak_update()
 
     def store_transition(self, trans):
-        self.buffer.add_transition(trans)
+        obs = trans[0] / self.obs_scale
+        obs_new = trans[3] / self.obs_scale
+        self.buffer.add_transition((obs, trans[1], trans[2], obs_new, trans[4]))
     
 
 class QFunction:

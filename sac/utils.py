@@ -34,7 +34,7 @@ LOSSES = {
 }
 
 
-def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds):
+def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_scale=1.):
     loss_f = LOSSES[loss]
     
     observation_dim = env.observation_space.shape[0]
@@ -55,7 +55,7 @@ def from_dict(env, hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, b
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     buffer = Memory(int(1e6))
-    sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size)
+    sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size, obs_scale=obs_scale)
     return sac
 
 
