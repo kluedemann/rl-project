@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import load_logs
+from sac.utils import load_logs
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0)) 
