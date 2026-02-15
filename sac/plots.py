@@ -1,9 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from utils import load_logs
 
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+
+def plot_results(filepath):
+    logs = load_logs(filepath)
+    q_losses = [logs["Q1_loss"], logs["Q2_loss"]]
+    plot_q(q_losses)
+
 
 def plot_q(q_losses, plot_path, N=50):
     plt.plot(q_losses, alpha=0.4, label=["Q1", "Q2"])

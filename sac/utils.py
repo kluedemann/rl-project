@@ -68,6 +68,17 @@ def load_stats(filepath):
         data = pickle.load(f)
     return data["rewards"], data["lengths"], data["losses"]
 
+def save_logs(filepath, logs):
+    with open(f"{filepath}-stat.pkl", 'wb') as f:
+        pickle.dump(logs, f)
+
+def load_logs(filepath):
+    with open(f"{filepath}-stat.pkl", 'rb') as f:
+        data = pickle.load(f)
+    return data
+
+
+
 
 def warmup_agent(agent, env, n_steps, max_timesteps):
     timestep = 0
