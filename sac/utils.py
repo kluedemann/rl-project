@@ -71,7 +71,7 @@ def get_trained_agent(filepath, params=HOCKEY_PARAMS):
     return new_agent
 
 
-def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_dim, obs_scale=1., buffer_size=int(1e6)):
+def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_dim=len(SCALING), obs_scale=1., buffer_size=int(1e6)):
     """Create new SAC agent.
     
     Params:
