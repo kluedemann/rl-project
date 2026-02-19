@@ -18,8 +18,11 @@ class HockeyTrainer:
         log_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs", "Rewards", "Scores", "Lengths"]
         self.logs = {x: [] for x in log_keys}
         
-        self.agent = from_dict(self.env, action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
+        self.agent = self.create_agent(params)
     
+    def create_agent(self, params):
+        return from_dict(self.env, action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
+
     def log_losses(self, losses):
         loss_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs"]
         for k, l in zip(loss_keys, losses):
@@ -34,12 +37,14 @@ class HockeyTrainer:
         self.agent.restore_state(state)
         self.logs = load_logs(filepath)
 
-    def train(self, opponent, new_episodes, train_interval, log_interval=20, max_timesteps=1000):
+    def train(self, tournament, new_episodes, train_interval, log_interval=20, max_timesteps=1000):
         for i in range(new_episodes):
             total_reward = 0
             o, info = self.env.reset()
             o2 = self.env.obs_agent_two()
             # env.render()
+
+            opponent = tournament.get_opponent(self.agent)
 
             for j in range(max_timesteps):
                 a1 = self.agent.act(o)
