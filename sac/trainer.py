@@ -8,20 +8,21 @@ SCALING = np.asarray([ 1.0,  1.0 , 0.5, 4.0, 4.0, 4.0,
             2.0, 2.0, 10.0, 10.0, 4.0 ,4.0])
 ACTION_BOUNDS = (-np.ones(4), np.ones(4))
 
-# DEFAULT_REWARD = lambda info : 10*info["winner"] + info["reward_closeness_to_puck"]
+DEFAULT_REWARD = lambda info : 10*info["winner"] + info["reward_closeness_to_puck"]
+SCORE_REWARD = lambda info : 10*info["winner"]
 
 class HockeyTrainer:
 
-    def __init__(self, params, mode=h_env.Mode.NORMAL):
+    def __init__(self, params, reward_func=DEFAULT_REWARD, mode=h_env.Mode.NORMAL):
         self.env = h_env.HockeyEnv(mode=mode)
         self.episode = 0
         log_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs", "Rewards", "Scores", "Lengths"]
         self.logs = {x: [] for x in log_keys}
-        
+        self.reward_func = reward_func
         self.agent = self.create_agent(params)
     
     def create_agent(self, params):
-        return from_dict(self.env, action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
+        return from_dict(action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
 
     def log_losses(self, losses):
         loss_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs"]
@@ -53,7 +54,9 @@ class HockeyTrainer:
                 obs, r, d, t , info = self.env.step(np.hstack([a1,a2]))
                 obs2 = self.env.obs_agent_two()
                 info2 = self.env.get_info_agent_two()
-                r2 = self.env.get_reward_agent_two(info2)
+                
+                r = self.reward_func(info)
+                r2 = self.reward_func(info2)
 
                 self.agent.store_transition((o, a1, r, obs, d))
                 self.agent.store_transition((o2, a2, r2, obs2, d))
@@ -75,7 +78,6 @@ class HockeyTrainer:
 
             if self.episode % log_interval == 0:
                 self.log_results(log_interval)
-                # print(i_episode+1, np.mean(rewards[-10:]))
     
     def log_results(self, log_interval):
         avg_reward = np.mean(self.logs["Rewards"][-log_interval:])
@@ -90,12 +92,14 @@ class HockeyTrainer:
             
             for _ in range(max_timesteps):
                 a1 = self.agent.act(o)
-                a2 = np.random.uniform(-1,1,4)
+                a2 = self.agent.act(o2)
 
                 obs, r, d, t , info = self.env.step(np.hstack([a1,a2]))
                 obs2 = self.env.obs_agent_two()
                 info2 = self.env.get_info_agent_two()
-                r2 = self.env.get_reward_agent_two(info2)
+                
+                r = self.reward_func(info)
+                r2 = self.reward_func(info2)
 
                 self.agent.store_transition((o, a1, r, obs, d))
                 self.agent.store_transition((o2, a2, r2, obs2, d))
@@ -126,9 +130,9 @@ class HockeyTrainer:
 
                 obs, r, d, t , info = self.env.step(np.hstack([a1,a2]))
                 o2 = self.env.obs_agent_two()
-                
-                # self.agent.store_transition((o, a1, 10*info['winner'], obs, d))
 
+                r = self.reward_func(info)
+                
                 o = obs
             
                 total_reward += r
