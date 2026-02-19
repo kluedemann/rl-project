@@ -298,25 +298,62 @@ class QFunction:
     
 
 class TanhGaussianPolicy:
+    """Tanh-squashed Gaussian Stochastic Policy
+    
+    Parameters:
+        base_net - policy network; output dimension 2*action_dim
+        optim - torch.optim optimizer
+        action_bounds - (low, high) - action space bound arrays of shape (action_dim,)
+    
+    Interface:
+        act(s) - selects action for agent
+        sample(s) - sample actions and logprobs from network
+    """
     MAX_LOGSIG = 2
     MIN_LOGSIG = -20
 
     def __init__(self, base_net, optim, action_bounds):
         self.base_net = base_net
         self.optimizer = optim
+
+        # Compute scale and offset to apply after Tanh
         action_low, action_high = action_bounds
         self.act_dim = action_low.shape[0]
         self.act_scale = torch.Tensor((action_high - action_low) * 0.5)
         self.act_offset = torch.Tensor((action_high + action_low) * 0.5)
 
     def forward(self, state):
+        """Compute action distribution before tanh for a state.
+        
+        Params:
+            state - (batch_size, state_dim)
+
+        Returns: (mu, logsig)
+            mu - the mean action before tanh
+            logsig - the feature-wise log-variances of the action before tanh 
+        """
+        # Forward pass
         output = self.base_net(state)
+
+        # Get mean and log variance
         mu = output[:, :self.act_dim]
-        logsig = torch.clip(output[:, self.act_dim:], TanhGaussianPolicy.MIN_LOGSIG, TanhGaussianPolicy.MAX_LOGSIG)
+        logsig = output[:, self.act_dim:]
+        
+        # Clip log variance for stability
+        # Source: https://github.com/openai/spinningup/blob/master/spinup/algos/pytorch/sac/core.py
+        logsig = torch.clip(logsig, TanhGaussianPolicy.MIN_LOGSIG, TanhGaussianPolicy.MAX_LOGSIG)
+        
         return mu, logsig
 
     def step(self, t):
-        self.base_net.train() # put model in training mode
+        """Perform policy network update step.
+        
+        Params:
+            t - maximum entropy RL target to be maximized
+        
+        Returns: the loss value for the batch
+        """
+        self.base_net.train()
         self.optimizer.zero_grad()
 
         # Compute Loss
@@ -325,28 +362,71 @@ class TanhGaussianPolicy:
         # Backward pass
         loss.backward()
         self.optimizer.step()
+
         return loss.item()
 
     def state(self):
+        """Return the parameters of the policy for saving.
+
+        Returns: base_network parameters - dict
+        """
         return self.base_net.state_dict()
 
     def restore_state(self, state):
+        """Return the policy from a state.
+
+        Params: 
+            state - base_network parameters - dict
+        """
         self.base_net.load_state_dict(state)
     
     def scale(self, act):
+        """Scale the action to fit in the action space.
+        
+        Params:
+            act - tanh-squashed action
+
+        Returns: action mapped into action space
+        """
         return self.act_scale * act + self.act_offset
 
     def act(self, state, noise_scale=1.):
+        """Select action for agent to perform.
+        
+        Params:
+            state - current state, shape (1, state_dim)
+            noise_scale - factor for sampling noise; 0 for mean
+        
+        Return: the action for the agent to take
+        """
         action, _ = self.sample(state, noise_scale)
         return action
 
     def sample(self, state, noise_scale=1.):
-        """https://github.com/openai/spinningup/issues/279"""
+        """Sample actions and logprobs from the policy for a given state.
+        
+        NOTE: Used numerically stable logprob calculcation from SpinningUp GitHub
+        after encountering NaN issues with original formula.
 
-        # Sample actions
+        Source: https://github.com/openai/spinningup/issues/279
+
+        Params:
+            state - (batch_size, state_dim)
+            noise_scale - sampling noise factor; 0 for mean
+
+        Returns: (actions, logprobs)
+            actions - sampled actions of shape (batch_size, action_dim)
+            logprobs - log probabilities of sampled actions of shape (batch_size,)
+        """
+
+        # Sample noise
         eps = torch.randn(state.shape[0], self.act_dim) * noise_scale
+        
+        # Compute Gaussian distribution
         mu, logsig = self.forward(state)
         transformed = mu + torch.exp(logsig) * eps
+        
+        # Transform to action space
         raw_act = torch.tanh(transformed)
         actions = self.scale(raw_act)
 
@@ -355,4 +435,5 @@ class TanhGaussianPolicy:
         transform_log_probs = -torch.log(self.act_scale[None]) - 2 * (np.log(2) - transformed - torch.nn.functional.softplus(-2 * transformed))
         all_log_probs = normal_log_probs + transform_log_probs
         log_probs = torch.sum(all_log_probs, axis=-1, keepdims=True)
+        
         return actions, log_probs
