@@ -4,7 +4,6 @@ from sac.memory import Memory
 import numpy as np
 
 
-
 class SAC:
     """Soft Actor-Critic Agent
 
@@ -16,13 +15,14 @@ class SAC:
         gamma - discount
         buffer - Memory
         batch_size - batch size for updates
-        fit_steps - number of updates per train call
+        obs_scale - factor used to divide the observations
 
     Interface:
         act(obs) - produce action
         train(fit_steps) - perform update step
         state - get model parameters
         restore_state - restore model from state
+        store_transition(transition) - add a (state, action, reward, next_state, done) tuple to the buffer
 
 
     NOTE: Code written by hand based on knowledge from class, papers, and reading online resources.
@@ -89,96 +89,211 @@ class SAC:
         """
         to_torch = lambda x: torch.from_numpy(x.astype(np.float32))
         
+        # Sample from buffer
         data=self.buffer.sample(batch=self.batch_size)
         
+        # Convert to float tensors
         s = to_torch(np.stack(data[:,0])) # s_t
         a = to_torch(np.stack(data[:,1])) # a_t
         rew = to_torch(np.stack(data[:,2])[:,None]) # rew  (batchsize,1)
         s_prime = to_torch(np.stack(data[:,3])) # s_t+1
         done = to_torch(np.stack(data[:,4])[:,None])
+        
         return s, a, rew, s_prime, done
 
     def train(self):
+        """Perform one training iteration.
+        Update the Q-functions and policy according to the SAC algorithm.
+
+        Returns: batch metrics (q1_loss, q2_loss, policy_loss, logprobs)
+            q1_loss - the loss value for Q1
+            q2_loss - the loss value for Q2
+            policy_loss - the loss value for the policy
+            logprobs - the mean logprobs over the batch
+        """
+        
+        # Sample batch and next actions
         state, action, reward, next_state, done = self.get_batch()
         next_action, logprob = self.policy.sample(state)
+        
+        # Compute loss targets
         t, q_target = self.compute_t(next_state, next_action, logprob)
         target = self.compute_target(t, reward, done)
+        
+        # Update value function and policy networks
         q1_loss = self.Q1.fit(state.detach(), action.detach(), target.detach())
         q2_loss = self.Q2.fit(state.detach(), action.detach(), target.detach())
         policy_loss = self.policy.step(t)
+        
+        # Update target networks
         self.update_targets()
+        
         return q1_loss, q2_loss, policy_loss, torch.mean(logprob.detach())
 
     def compute_t(self, s_p, a_p, logprob):
+        """Compute the maximum entropy RL target.
+        target = min(Q1, Q2) - alpha * logprobs
+        
+        Params:
+            s_p - next states (batch_size, state_dim)
+            a_p - next actions (batch_size, action_dim)
+            logprob - log probabilities of actions (batch_size,)
+        
+        Returns: (t, q_target) each with shape (batch_size,)
+            t - maximum entropy RL target
+            q_target - minimum target network Q value
+        """
+
+        # Compute minimum target value
         q1 = self.Q1.target_val(s_p, a_p) 
         q2 = self.Q2.target_val(s_p, a_p)
         q_target = torch.min(q1, q2) 
+
+        # Compute policy update target
         t = q_target - self.alpha * logprob
+        
         return t, q_target
     
     def compute_target(self, t, r, d):
+        """Compute the target for the Q-value update.
+        target = R + gamma * (min(Q1, Q2) - alpha * logprobs)
+
+        Params: each with shape (batch_size,)
+            t - maximum entropy RL target
+            r - reward
+            d - done/truncation flag
+
+        Returns: y - Q-function update targets (batch_size,)
+        """
         y = r + self.gamma * (1-d) * t
         return y
 
     def update_targets(self):
+        """Update target networks for value functions."""
         self.Q1.polyak_update()
         self.Q2.polyak_update()
 
     def store_transition(self, trans):
+        """Store transition in replay buffer.
+        Rescale by dividing by self.obs_scale.
+        
+        Params: 
+            trans - environment transition (s, a, r, s', d) 
+        """
+
+        # Rescale observation
         obs = trans[0] / self.obs_scale
         obs_new = trans[3] / self.obs_scale
+
+        # Add rescaled transition
         self.buffer.add_transition((obs, trans[1], trans[2], obs_new, trans[4]))
     
 
 class QFunction:
+    """Action-value approximation function
+    
+    Params:
+        base - the network used for learning the approximation
+        target - the target network; will be overwritten
+        optim - the optimizer from torch.optim
+        loss - the loss function used
+        tau - the Polyak update coefficient
+
+    Interface:
+        fit(s, a, t) - perform an update step
+        target_value(s, a) - compute the value of the target network
+        state - get network parameters
+        restore_state(state) - restore from state
+        polyak_update() - update target network
+    """
+
     def __init__(self, base, target, optim, loss, tau):
-        super().__init__()
-        # TODO: Setup network with right input and output size (using super().__init__)
         self.model = base
         self.target = target
-        self.target.load_state_dict(base.state_dict())
         self.tau = tau
-
-        # END
         self.optimizer=optim
         self.loss = loss
 
-    def fit(self, observations, actions, targets): # all arguments should be torch tensors
-        self.model.train() # put model in training mode
-        self.optimizer.zero_grad()
-        # Forward pass
+        # Initialize target network to match base
+        self.target.load_state_dict(base.state_dict())
 
+    def fit(self, observations, actions, targets): # all arguments should be torch tensors
+        """Perform an update step for the Q-function
+        
+        Params:
+            observations - (batch_size, obs_dim)
+            actions - (batch_size, action_dim)
+            targets - the Q-function update targets (batch_size,)
+
+        Returns: the loss value for the batch
+        """
+        self.model.train()
+        self.optimizer.zero_grad()
+
+        # Compute loss
         pred = self.Q_value(observations,actions)
-        # Compute Loss
         loss = self.loss(pred, targets)
 
         # Backward pass
         loss.backward()
         self.optimizer.step()
+
         return loss.item()
 
     def state(self):
+        """Return the state of the Q-function for saving.
+
+        Returns: (Q network state, target network state) - tuple of dicts
+        """
         return (self.model.state_dict(), self.target.state_dict())
 
     def restore_state(self, state):
+        """Restore a model from a state.
+
+        Params: 
+            state (Q network state, target network state) - tuple of dicts
+        """
         self.model.load_state_dict(state[0])
         self.target.load_state_dict(state[1])
     
     def target_val(self, observations, actions):
-        # TODO: implement the forward pass.
+        """Compute the target network value.
+        
+        Params:
+            observations - states (batch_size, state_dim)
+            actions - (batch_size, action_dim)
+
+        Returns: Q(s, a) for target network with shape (batch_size,)
+        """
         return self.target(torch.cat((observations, actions), dim=-1))
 
     def Q_value(self, observations, actions):
-        # TODO: implement the forward pass.
+        """Compute the Q network value.
+        
+        Params:
+            observations - states (batch_size, state_dim)
+            actions - (batch_size, action_dim)
+
+        Returns: Q(s, a) with shape (batch_size,)
+        """
         return self.model(torch.cat((observations, actions), dim=-1))
     
     def polyak_update(self):
+        """Update the target network using a exponential moving average.
+        target <- tau * target + (1-tau) * Q_net
+        """
+        # Get Q and target parameters
         Q_dict = self.model.state_dict()
         target_dict = self.target.state_dict()
+
+        # Compute new parameters
         new_dict = {}
         with torch.no_grad():
             for k in Q_dict:
+                # Compute Polyak update
                 new_dict[k] = self.tau * target_dict[k] + (1-self.tau) * Q_dict[k]
+        
+        # Load parameters into target network
         self.target.load_state_dict(new_dict)
     
 
