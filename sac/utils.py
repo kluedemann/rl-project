@@ -3,6 +3,7 @@ import torch
 from sac.feedforward import Feedforward
 from sac.memory import Memory
 from sac.SAC import *
+from sac.schedules import *
 import pickle
 
 
@@ -71,7 +72,7 @@ def get_trained_agent(filepath, params=HOCKEY_PARAMS):
     return new_agent
 
 
-def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_dim=len(SCALING), obs_scale=1., buffer_size=int(1e6)):
+def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_dim=len(SCALING), obs_scale=1., buffer_size=int(1e6), **kwargs):
     """Create new SAC agent.
     
     Params:
@@ -112,9 +113,13 @@ def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     
+    # alpha_schedule = ConstantSchedule(alpha)
+    entropy = -action_dim
+    alpha_schedule = AdaptiveSchedule(alpha=alpha, entropy=entropy, **kwargs)
+
     # Create SAC agent
     buffer = Memory(buffer_size)
-    sac = SAC(Q1, Q2, policy, alpha=alpha, gamma=gamma, buffer=buffer, batch_size=batch_size, obs_scale=obs_scale)
+    sac = SAC(Q1, Q2, policy, alpha_schedule=alpha_schedule, gamma=gamma, buffer=buffer, batch_size=batch_size, obs_scale=obs_scale)
     return sac
 
 
@@ -170,6 +175,7 @@ def warmup_agent(agent, env, n_steps, max_timesteps):
 
 
 def train_agent(agent, env, i_episode, new_episodes, max_timesteps, filepath, losses, rewards, lengths, log_interval, save_interval, train_interval):
+    alphas = []
     for i in range(new_episodes):
         ob, _info = env.reset()
         total_reward=0
@@ -182,6 +188,7 @@ def train_agent(agent, env, i_episode, new_episodes, max_timesteps, filepath, lo
             agent.store_transition((ob, a, reward, ob_new, done))
             if (t+1) % train_interval == 0: 
                 loss = agent.train()
+                alphas.append(agent.alpha_schedule.get_alpha())
                 # e_losses.append(loss)
                 losses.append(loss)
             ob=ob_new
@@ -208,4 +215,4 @@ def train_agent(agent, env, i_episode, new_episodes, max_timesteps, filepath, lo
     
             print('Episode {} \t avg length: {} \t reward: {}'.format(i_episode, avg_length, avg_reward))
     save_statistics(filepath, rewards, lengths, losses)
-    return losses, rewards, lengths, i_episode
+    return losses, rewards, lengths, i_episode, alphas

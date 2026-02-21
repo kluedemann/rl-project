@@ -36,11 +36,11 @@ class SAC:
     """
 
 
-    def __init__(self, Q1, Q2, policy, alpha, gamma, buffer, batch_size, obs_scale=1.):
+    def __init__(self, Q1, Q2, policy, alpha_schedule, gamma, buffer, batch_size, obs_scale=1.):
         self.Q1 = Q1
         self.Q2 = Q2
         self.policy = policy
-        self.alpha = alpha
+        self.alpha_schedule = alpha_schedule
         self.gamma = gamma
         self.buffer = buffer
         self.batch_size = batch_size
@@ -125,6 +125,8 @@ class SAC:
         q2_loss = self.Q2.fit(state.detach(), action.detach(), target.detach())
         policy_loss = self.policy.step(t)
         
+        self.alpha_schedule.update(logprob.detach())
+
         # Update target networks
         self.update_targets()
         
@@ -150,7 +152,7 @@ class SAC:
         q_target = torch.min(q1, q2) 
 
         # Compute policy update target
-        t = q_target - self.alpha * logprob
+        t = q_target - self.alpha_schedule.get_alpha() * logprob
         
         return t, q_target
     
