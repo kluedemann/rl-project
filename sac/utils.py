@@ -5,6 +5,8 @@ from sac.memory import Memory
 from sac.SAC import *
 from sac.schedules import *
 import pickle
+from hl_gauss_pytorch import HLGaussLoss
+from sac.hlgauss import HLGaussQ
 
 
 SCALING = np.asarray([ 1.0,  1.0 , 0.5, 4.0, 4.0, 4.0,  
@@ -101,12 +103,71 @@ def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_
     Q1_optim = torch.optim.Adam(Q1_base.parameters(),
                                             lr=lr_critic)
     Q1 = QFunction(Q1_base, Q1_target, Q1_optim, loss_f, tau)
-    
+
     # Initialize second Q function
     Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
     Q2_optim = torch.optim.Adam(Q2_base.parameters(), lr=lr_critic)
     Q2 = QFunction(Q2_base, Q2_target, Q2_optim, loss_f, tau)
+    
+    # Initialize policy
+    policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)
+    policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
+    policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
+    
+    # alpha_schedule = ConstantSchedule(alpha)
+    entropy = -action_dim
+    alpha_schedule = AdaptiveSchedule(alpha=alpha, entropy=entropy, **kwargs)
+
+    # Create SAC agent
+    buffer = Memory(buffer_size)
+    sac = SAC(Q1, Q2, policy, alpha_schedule=alpha_schedule, gamma=gamma, buffer=buffer, batch_size=batch_size, obs_scale=obs_scale)
+    return sac
+
+
+def hl_sac(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_size, action_bounds, obs_dim=len(SCALING), obs_scale=1., buffer_size=int(1e6), **kwargs):
+    """Create new SAC agent.
+    
+    Params:
+        hidden_sizes - hidden layer widths for value function and policy networks
+        lr_critic - critic learning rate
+        lr_actor - actor learning rate
+        loss - critic loss function; accepts (values, targets)
+        tau - Polyak update coefficient
+        alpha - entropy regularization coefficient
+        gamma - discount factor
+        batch_size - update batch size
+        action_bounds - (low, high) the bounds for the action space of shape (action_dim,)
+        obs_dim - dimension of observation space
+        obs_scale - scaling factor to divide observations by; float or np.array (state_dim,)
+        buffer_size - maximum size of replay buffer
+    
+    Returns: the initialized SAC agent
+    """
+    n_bins = 50
+    loss_f = HLGaussLoss(
+        min_value = -30,
+        max_value = 12.,
+        num_bins = n_bins,
+        sigma_to_bin_ratio= 0.75,
+        clamp_to_range = True # this was added because if any values fall outside of the bins, the loss is 0 with the current logic
+    )
+    # loss_f = LOSSES[loss]
+    observation_dim = obs_dim
+    action_dim = action_bounds[0].shape[0]
+    
+    # Initialize first Q function
+    Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q1_optim = torch.optim.Adam(Q1_base.parameters(),
+                                            lr=lr_critic)
+    Q1 = HLGaussQ(Q1_base, Q1_target, Q1_optim, loss_f, tau)
+    
+    # Initialize second Q function
+    Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q2_optim = torch.optim.Adam(Q2_base.parameters(), lr=lr_critic)
+    Q2 = HLGaussQ(Q2_base, Q2_target, Q2_optim, loss_f, tau)
     
     # Initialize policy
     policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)

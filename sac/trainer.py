@@ -1,4 +1,4 @@
-from sac.utils import from_dict, load_logs, save_logs
+from sac.utils import from_dict, load_logs, save_logs, hl_sac
 import numpy as np
 import torch
 import hockey.hockey_env as h_env
@@ -23,6 +23,7 @@ class HockeyTrainer:
     
     def create_agent(self, params):
         return from_dict(action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
+        # return hl_sac(action_bounds=ACTION_BOUNDS, obs_scale=SCALING, **params)
 
     def log_losses(self, losses):
         loss_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs"]

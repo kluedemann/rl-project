@@ -13,11 +13,12 @@ def plot_results(filepath):
     plot_q(q_losses)
 
 
-def plot_q(q_losses, plot_path, N=50):
+def plot_q(q_losses, plot_path, N=50, use_log=True):
     plt.plot(q_losses, alpha=0.4, label=["Q1", "Q2"])
     plt.plot(running_mean(q_losses[:,0], N), color="tab:blue", label="Q1 Mean N=50")
     plt.plot(running_mean(q_losses[:,1], N), color="tab:orange", label="Q2 Mean N=50")
-    plt.yscale("log")
+    if use_log:
+        plt.yscale("log")
     plt.ylabel("Q Loss")
     plt.xlabel("Episode")
     plt.legend()
