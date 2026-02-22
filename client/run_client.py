@@ -83,7 +83,7 @@ def initialize_agent(agent_args: list[str]) -> Agent:
     elif args.agent == "random":
         agent = RandomAgent()
     elif args.agent == "sac":
-        sac = get_trained_agent("./agents/strongcont-0-5500.pth")
+        sac = get_trained_agent("./agents/adaptive-0-1500.pth")
         agent = SACAgent(sac)
     else:
         raise ValueError(f"Unknown agent: {args.agent}")
