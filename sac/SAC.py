@@ -3,6 +3,8 @@ from sac.feedforward import Feedforward
 from sac.memory import Memory
 import numpy as np
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 class SAC:
     """Soft Actor-Critic Agent
@@ -87,7 +89,7 @@ class SAC:
             s_prime - next states
             done - truncation flag
         """
-        to_torch = lambda x: torch.from_numpy(x.astype(np.float32))
+        to_torch = lambda x: torch.from_numpy(x.astype(np.float32)).to(device)
         
         # Sample from buffer
         data=self.buffer.sample(batch=self.batch_size)

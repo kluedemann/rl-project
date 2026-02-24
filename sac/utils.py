@@ -9,6 +9,10 @@ from hl_gauss_pytorch import HLGaussLoss
 from sac.hlgauss import HLGaussQ
 
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+
 SCALING = np.asarray([ 1.0,  1.0 , 0.5, 4.0, 4.0, 4.0,  
             1.0,  1.0,  0.5, 4.0, 4.0, 4.0,  
             2.0, 2.0, 10.0, 10.0, 4.0 ,4.0])
@@ -60,7 +64,7 @@ LOSSES = {
     "MSE": torch.nn.MSELoss()
 }
 
-def create_agent(self, hl=False, **params):
+def create_agent(hl=False, **params):
         if hl:
             return hl_sac(**params)
         else:
@@ -104,20 +108,20 @@ def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_
     action_dim = action_bounds[0].shape[0]
     
     # Initialize first Q function
-    Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
-    Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
+    Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1).to(device)
+    Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1).to(device)
     Q1_optim = torch.optim.Adam(Q1_base.parameters(),
                                             lr=lr_critic)
     Q1 = QFunction(Q1_base, Q1_target, Q1_optim, loss_f, tau)
 
     # Initialize second Q function
-    Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
-    Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1)
+    Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1).to(device)
+    Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, 1).to(device)
     Q2_optim = torch.optim.Adam(Q2_base.parameters(), lr=lr_critic)
     Q2 = QFunction(Q2_base, Q2_target, Q2_optim, loss_f, tau)
     
     # Initialize policy
-    policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)
+    policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim).to(device)
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     
@@ -163,20 +167,20 @@ def hl_sac(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_siz
     action_dim = action_bounds[0].shape[0]
     
     # Initialize first Q function
-    Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
-    Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins).to(device)
+    Q1_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins).to(device)
     Q1_optim = torch.optim.Adam(Q1_base.parameters(),
                                             lr=lr_critic)
     Q1 = HLGaussQ(Q1_base, Q1_target, Q1_optim, loss_f, tau)
     
     # Initialize second Q function
-    Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
-    Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins)
+    Q2_base = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins).to(device)
+    Q2_target = Feedforward(observation_dim+action_dim, hidden_sizes, n_bins).to(device)
     Q2_optim = torch.optim.Adam(Q2_base.parameters(), lr=lr_critic)
     Q2 = HLGaussQ(Q2_base, Q2_target, Q2_optim, loss_f, tau)
     
     # Initialize policy
-    policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim)
+    policy_base = Feedforward(observation_dim, hidden_sizes, 2*action_dim).to(device)
     policy_optim = torch.optim.Adam(policy_base.parameters(), lr=lr_actor)
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     
