@@ -93,6 +93,7 @@ class HockeyTrainer:
             # env.render()
 
             opponent = tournament.get_opponent(self.agent)
+            losses = []
 
             for j in range(max_timesteps):
                 a1 = self.agent.act(o)
@@ -110,7 +111,7 @@ class HockeyTrainer:
                 
                 if j % train_interval == 0:
                     loss = self.agent.train()
-                    self.log_losses(loss)
+                    losses.append(loss)
 
                 total_reward += r
                 o = obs
@@ -119,6 +120,7 @@ class HockeyTrainer:
 
             self.episode += 1
             
+            self.log_losses(np.mean(np.asarray(loss), axis=0))
             self.logs["Scores"].append(info["winner"])
             self.logs["Lengths"].append(j+1)
             self.logs["Rewards"].append(total_reward)
