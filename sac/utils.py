@@ -78,7 +78,7 @@ def get_trained_agent(filepath, params=HOCKEY_PARAMS):
         params - agent parameters
     """
     new_agent = create_agent(**params)
-    state = torch.load(filepath)
+    state = torch.load(filepath, map_location=torch.device(device))
     new_agent.restore_state(state)
     return new_agent
 

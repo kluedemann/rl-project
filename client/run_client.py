@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import uuid
+import pickle
 
 import hockey.hockey_env as h_env
 import numpy as np
@@ -83,7 +84,9 @@ def initialize_agent(agent_args: list[str]) -> Agent:
     elif args.agent == "random":
         agent = RandomAgent()
     elif args.agent == "sac":
-        sac = get_trained_agent("./agents/adaptive-0-1500.pth")
+        with open("./agents/params.pkl", "rb") as in_file:
+            params = pickle.load(in_file)
+        sac = get_trained_agent("./agents/2300.pth", params)
         agent = SACAgent(sac)
     else:
         raise ValueError(f"Unknown agent: {args.agent}")
