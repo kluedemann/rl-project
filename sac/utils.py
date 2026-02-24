@@ -16,7 +16,6 @@ ACTION_BOUNDS = (-np.ones(4), np.ones(4))
 
 
 HOCKEY_PARAMS = {
-    # NOTE: Only hidden_sizes is relevant if loading agent
     "lr_actor": 3e-4,
     "lr_critic": 3e-4,
     "tau": 1-0.005,
@@ -24,6 +23,7 @@ HOCKEY_PARAMS = {
     "gamma": 0.99,
     "alpha": 0.01,
     "loss": "MSE",
+    # Below are relevant if loading agent
     "hidden_sizes": [256, 256],
     "obs_dim": len(SCALING),
     "obs_scale": SCALING,
@@ -60,6 +60,12 @@ LOSSES = {
     "MSE": torch.nn.MSELoss()
 }
 
+def create_agent(self, hl=False, **params):
+        if hl:
+            return hl_sac(**params)
+        else:
+            return from_dict(**params)
+
 
 def get_trained_agent(filepath, params=HOCKEY_PARAMS):
     """Create a trained agent from a state file.
@@ -68,7 +74,7 @@ def get_trained_agent(filepath, params=HOCKEY_PARAMS):
         filepath - path to saved model state; *.pth
         params - agent parameters
     """
-    new_agent = from_dict(**params)
+    new_agent = create_agent(**params)
     state = torch.load(filepath)
     new_agent.restore_state(state)
     return new_agent
@@ -144,10 +150,10 @@ def hl_sac(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_siz
     
     Returns: the initialized SAC agent
     """
-    n_bins = 50
+    n_bins = 51
     loss_f = HLGaussLoss(
         min_value = -30,
-        max_value = 12.,
+        max_value = 11,
         num_bins = n_bins,
         sigma_to_bin_ratio= 0.75,
         clamp_to_range = True # this was added because if any values fall outside of the bins, the loss is 0 with the current logic

@@ -19,7 +19,7 @@ class SACAgent(Agent):
         # env = HockeyEnv()
         # continuous_action = env.discrete_to_continous_action(discrete_action)
 
-        action = self.agent.act(np.asarray(observation)).tolist()
+        action = self.agent.act(np.asarray(observation), noise_scale=0.).tolist()
         return action
 
     def on_start_game(self, game_id) -> None:
