@@ -15,8 +15,8 @@ def plot_results(filepath):
 
 def plot_q(q_losses, plot_path, N=50, use_log=True):
     plt.plot(q_losses, alpha=0.4, label=["Q1", "Q2"])
-    plt.plot(running_mean(q_losses[:,0], N), color="tab:blue", label="Q1 Mean N=50")
-    plt.plot(running_mean(q_losses[:,1], N), color="tab:orange", label="Q2 Mean N=50")
+    plt.plot(running_mean(q_losses[:,0], N), color="tab:blue", label=f"Q1 Mean N={N}")
+    plt.plot(running_mean(q_losses[:,1], N), color="tab:orange", label=f"Q2 Mean N={N}")
     if use_log:
         plt.yscale("log")
     plt.ylabel("Q Loss")
@@ -29,7 +29,7 @@ def plot_q(q_losses, plot_path, N=50, use_log=True):
 
 def plot_policy_loss(policy_loss, plot_path, N=50):
     plt.plot(policy_loss, alpha=0.4, label="Policy Loss")
-    plt.plot(running_mean(policy_loss, N), color="tab:blue", label="Mean N=50")
+    plt.plot(running_mean(policy_loss, N), color="tab:blue", label=f"Mean N={N}")
     
     plt.ylabel("Policy Loss")
     plt.xlabel("Episode")

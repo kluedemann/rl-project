@@ -12,7 +12,6 @@ from sac.hlgauss import HLGaussQ
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-
 SCALING = np.asarray([ 1.0,  1.0 , 0.5, 4.0, 4.0, 4.0,  
             1.0,  1.0,  0.5, 4.0, 4.0, 4.0,  
             2.0, 2.0, 10.0, 10.0, 4.0 ,4.0])
@@ -106,6 +105,8 @@ def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_
     loss_f = LOSSES[loss]
     observation_dim = obs_dim
     action_dim = action_bounds[0].shape[0]
+
+    kwargs.pop("hl_bounds")
     
     # Initialize first Q function
     Q1_base = Feedforward(observation_dim+action_dim, hidden_sizes, 1).to(device)
@@ -126,7 +127,7 @@ def from_dict(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     
     # alpha_schedule = ConstantSchedule(alpha)
-    entropy = -action_dim
+    entropy = kwargs.pop("entropy", -action_dim)
     alpha_schedule = AdaptiveSchedule(alpha=alpha, entropy=entropy, **kwargs)
 
     # Create SAC agent
@@ -155,13 +156,14 @@ def hl_sac(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_siz
     Returns: the initialized SAC agent
     """
     n_bins = 51
+    min_value, max_value = kwargs.pop("hl_bounds", [-30, 11])
     loss_f = HLGaussLoss(
-        min_value = -30,
-        max_value = 11,
+        min_value = min_value,
+        max_value = max_value,
         num_bins = n_bins,
         sigma_to_bin_ratio= 0.75,
         clamp_to_range = True # this was added because if any values fall outside of the bins, the loss is 0 with the current logic
-    )
+    ).to(device)
     # loss_f = LOSSES[loss]
     observation_dim = obs_dim
     action_dim = action_bounds[0].shape[0]
@@ -185,7 +187,7 @@ def hl_sac(hidden_sizes, lr_critic, lr_actor, loss, tau, alpha, gamma, batch_siz
     policy = TanhGaussianPolicy(policy_base, policy_optim, action_bounds)
     
     # alpha_schedule = ConstantSchedule(alpha)
-    entropy = -action_dim
+    entropy = kwargs.pop("entropy", -action_dim)
     alpha_schedule = AdaptiveSchedule(alpha=alpha, entropy=entropy, **kwargs)
 
     # Create SAC agent
@@ -201,7 +203,7 @@ def save_logs(filepath, logs):
         filepath - the base path to file; extension will be added
         logs - (dict) the logs to save
     """
-    with open(f"{filepath}-stat.pkl", 'wb') as f:
+    with open(f"{filepath}/stat.pkl", 'wb') as f:
         pickle.dump(logs, f)
 
 
@@ -213,7 +215,7 @@ def load_logs(filepath):
     
     Returns: (dict) - the training logs
     """
-    with open(f"{filepath}-stat.pkl", 'rb') as f:
+    with open(f"{filepath}/stat.pkl", 'rb') as f:
         data = pickle.load(f)
     return data
 

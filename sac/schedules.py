@@ -13,6 +13,9 @@ class AlphaSchedule(abc.ABC):
     def update(self, logprobs):
         pass
 
+    def state(self):
+        return []
+
 class ConstantSchedule(AlphaSchedule):
 
     def __init__(self, alpha):
@@ -43,3 +46,11 @@ class AdaptiveSchedule(AlphaSchedule):
         loss = losses.mean()
         loss.backward()
         self.optim.step()
+
+    def state(self):
+        return (self.log_alpha, self.optim.state_dict())
+
+    def restore_state(self, state):
+        with torch.no_grad():
+            self.log_alpha.copy_(state[0])
+        self.optim.load_state_dict(state[1])

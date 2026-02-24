@@ -12,7 +12,7 @@ ipympl
 # Add this if you need a CPU only version
 # --index-url https://download.pytorch.org/whl/cpu
 # --extra-index-url https://pypi.org/simple
-torch --index-url https://download.pytorch.org/whl/cpu
+torch
 comprl @ git+https://github.com/martius-lab/teamproject-competition-server.git#egg=comprl&subdirectory=comprl
 hockey @ git+https://git@github.com/martius-lab/hockey-env.git
 hl-gauss-pytorch

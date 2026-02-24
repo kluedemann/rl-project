@@ -3,6 +3,7 @@ from sac.feedforward import Feedforward
 from sac.memory import Memory
 import numpy as np
 
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -59,15 +60,15 @@ class SAC:
         """
         with torch.no_grad():
             scaled_obs = obs / self.obs_scale
-            actions = self.policy.act(torch.tensor(scaled_obs[None]).float(), noise_scale)
-            return actions[0].detach().numpy()
+            actions = self.policy.act(torch.tensor(scaled_obs[None]).float().to(device), noise_scale)
+            return actions[0].detach().cpu().numpy()
     
     def state(self):
         """Return the state of the agent for saving.
 
         Returns: (Q1 state, Q2 state, Policy state) - tuple of dicts
         """
-        return (self.Q1.state(), self.Q2.state(), self.policy.state())
+        return (self.Q1.state(), self.Q2.state(), self.policy.state(), self.alpha_schedule.state())
 
     def restore_state(self, state):
         """Restore a model from a state.
@@ -78,6 +79,7 @@ class SAC:
         self.Q1.restore_state(state[0])
         self.Q2.restore_state(state[1])
         self.policy.restore_state(state[2])
+        self.alpha_schedule.restore_state(state[3])
     
     def get_batch(self):
         """Sample a batch from memory and convert to tensors.
@@ -132,7 +134,7 @@ class SAC:
         # Update target networks
         self.update_targets()
         
-        return q1_loss, q2_loss, policy_loss, torch.mean(logprob.detach())
+        return q1_loss, q2_loss, policy_loss, np.mean(logprob.detach().cpu().numpy())
 
     def compute_t(self, s_p, a_p, logprob):
         """Compute the maximum entropy RL target.
@@ -249,7 +251,7 @@ class QFunction:
 
         Returns: (Q network state, target network state) - tuple of dicts
         """
-        return (self.model.state_dict(), self.target.state_dict())
+        return (self.model.state_dict(), self.target.state_dict(), self.optimizer.state_dict())
 
     def restore_state(self, state):
         """Restore a model from a state.
@@ -259,6 +261,7 @@ class QFunction:
         """
         self.model.load_state_dict(state[0])
         self.target.load_state_dict(state[1])
+        self.optimizer.load_state_dict(state[2])
     
     def target_val(self, observations, actions):
         """Compute the target network value.
@@ -323,8 +326,8 @@ class TanhGaussianPolicy:
         # Compute scale and offset to apply after Tanh
         action_low, action_high = action_bounds
         self.act_dim = action_low.shape[0]
-        self.act_scale = torch.Tensor((action_high - action_low) * 0.5)
-        self.act_offset = torch.Tensor((action_high + action_low) * 0.5)
+        self.act_scale = torch.Tensor((action_high - action_low) * 0.5).to(device)
+        self.act_offset = torch.Tensor((action_high + action_low) * 0.5).to(device)
 
     def forward(self, state):
         """Compute action distribution before tanh for a state.
@@ -374,7 +377,7 @@ class TanhGaussianPolicy:
 
         Returns: base_network parameters - dict
         """
-        return self.base_net.state_dict()
+        return (self.base_net.state_dict(), self.optimizer.state_dict())
 
     def restore_state(self, state):
         """Return the policy from a state.
@@ -382,7 +385,8 @@ class TanhGaussianPolicy:
         Params: 
             state - base_network parameters - dict
         """
-        self.base_net.load_state_dict(state)
+        self.base_net.load_state_dict(state[0])
+        self.optimizer.load_state_dict(state[1])
     
     def scale(self, act):
         """Scale the action to fit in the action space.
@@ -424,7 +428,7 @@ class TanhGaussianPolicy:
         """
 
         # Sample noise
-        eps = torch.randn(state.shape[0], self.act_dim) * noise_scale
+        eps = torch.randn(state.shape[0], self.act_dim).to(device) * noise_scale
         
         # Compute Gaussian distribution
         mu, logsig = self.forward(state)

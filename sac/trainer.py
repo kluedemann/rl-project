@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import hockey.hockey_env as h_env
 
+import os
+
 SCALING = np.asarray([ 1.0,  1.0 , 0.5, 4.0, 4.0, 4.0,  
             1.0,  1.0,  0.5, 4.0, 4.0, 4.0,  
             2.0, 2.0, 10.0, 10.0, 4.0 ,4.0])
@@ -13,11 +15,11 @@ SCORE_REWARD = lambda info : 10*info["winner"]
 
 class HockeyTrainer:
 
-    def __init__(self, agent, reward_func=DEFAULT_REWARD, mode=h_env.Mode.NORMAL):
+    def __init__(self, agent, reward_func=DEFAULT_REWARD, mode=h_env.Mode.NORMAL, start_ep=0):
         self.env = h_env.HockeyEnv(mode=mode)
-        self.episode = 0
-        log_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs", "Rewards", "Scores", "Lengths"]
-        self.logs = {x: [] for x in log_keys}
+        self.episode = start_ep
+        self.log_keys = ["Q1_loss", "Q2_loss", "Policy_loss", "Logprobs", "Rewards", "Scores", "Lengths", "Steps"]
+        self.logs = {x: [] for x in self.log_keys}
         self.reward_func = reward_func
         self.agent = agent
         # self.agent = self.create_agent(params, hl)
@@ -120,10 +122,11 @@ class HockeyTrainer:
 
             self.episode += 1
             
-            self.log_losses(np.mean(np.asarray(loss), axis=0))
+            self.log_losses(np.mean(np.asarray(losses), axis=0))
             self.logs["Scores"].append(info["winner"])
             self.logs["Lengths"].append(j+1)
             self.logs["Rewards"].append(total_reward)
+            self.logs["Steps"].append(len(losses))
 
             if self.episode % log_interval == 0:
                 self.log_results(log_interval)
@@ -133,15 +136,20 @@ class HockeyTrainer:
         winrate = 0.5* (np.mean(self.logs["Scores"][-log_interval:])+1)
         print(f"{self.episode:6}: Reward: {avg_reward:8.3f} Winrate: {winrate:8.3f}")
 
-    def warmup(self, timesteps, max_timesteps=1000):
+    def warmup(self, timesteps, tournament=None, max_timesteps=1000):
         curr = 0
         while curr < timesteps:
             o, info = self.env.reset()
             o2 = self.env.obs_agent_two()
+
+            if tournament is None:
+                agent = self.agent
+            else:
+                agent = tournament.get_opponent(self.agent)
             
             for _ in range(max_timesteps):
                 a1 = self.agent.act(o)
-                a2 = self.agent.act(o2)
+                a2 = agent.act(o2)
 
                 obs, r, d, t , info = self.env.step(np.hstack([a1,a2]))
                 obs2 = self.env.obs_agent_two()
@@ -159,8 +167,8 @@ class HockeyTrainer:
                 curr += 1
 
                 if d or t: break
-
-    def evaluate(self, opponent, episodes=5, render=False, max_timesteps=1000, noise_scale=0.):
+                
+    def evaluate(self, opponent=None, tournament=None, episodes=5, render=False, max_timesteps=1000, noise_scale=0.):
         rewards = []
         scores = []
         for i in range(episodes):
@@ -169,6 +177,9 @@ class HockeyTrainer:
             
             if render:
                 self.env.render()
+
+            if tournament is not None:
+                opponent = tournament.get_opponent(self.agent)
             
             total_reward = 0
             for _ in range(max_timesteps):
@@ -190,7 +201,21 @@ class HockeyTrainer:
             rewards.append(total_reward)
         return rewards, scores
 
+    def reset_logs(self):
+        self.logs = {x: [] for x in self.log_keys}
+
+    def update_logs(self, filepath):
+        if os.path.exists(f"{filepath}/stat.pkl"):
+            logs = load_logs(filepath)
+        else:
+            logs = {x: [] for x in self.log_keys}
+        for k in self.log_keys:
+            logs[k].extend(self.logs[k])
+        save_logs(filepath, logs)
+        self.logs = {x: [] for x in self.log_keys}
+
     def save_agent(self, filepath):
-        torch.save(self.agent.state(), f'{filepath}-{self.episode}.pth')
-        save_logs(filepath, self.logs)
+        torch.save(self.agent.state(), f'{filepath}/{self.episode}.pth')
+        self.update_logs(filepath)
+        # save_logs(filepath, self.logs)
         # save_statistics(filepath, self.rewards, self.lengths, self.losses)
