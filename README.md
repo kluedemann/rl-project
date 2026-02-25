@@ -8,7 +8,11 @@
 3. Load trained agent from `.pth` file
 ```
 from sac.utils import get_trained_agent
-agent = get_trained_agent(path_to_file)
-o, info = env.reset()
-agent.act(o)
+import pickle
+
+with open(path_to_params, "rb") as params_file:
+    params = pickle.load(params_file)
+
+agent = get_trained_agent(path_to_file, params)
+agent.act(obs, noise_scale=0.)
 ```
