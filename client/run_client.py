@@ -86,7 +86,7 @@ def initialize_agent(agent_args: list[str]) -> Agent:
     elif args.agent == "sac":
         with open("./agents/params.pkl", "rb") as in_file:
             params = pickle.load(in_file)
-        sac = get_trained_agent("./agents/4400.pth", params)
+        sac = get_trained_agent("./agents/selfplay-hl-4400.pth", params)
         agent = SACAgent(sac)
     else:
         raise ValueError(f"Unknown agent: {args.agent}")
