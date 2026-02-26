@@ -67,10 +67,11 @@ def plot_rewards(all_rewards, time_steps, update_steps):
         x = np.arange(1, n_steps+1) * (time_steps // update_steps)
         plt.plot(x, median, label=name)
         plt.fill_between(x, min_val, max_val, alpha=0.4)
-    plt.legend()
-    plt.ylabel("Total Episode Reward")
-    plt.xlabel("Training Step")
-    plt.title("HalfCheetah-v5")
+    plt.legend(fontsize="large")
+    plt.ylabel("Total Episode Reward", fontsize="large")
+    plt.xlabel("Training Step", fontsize="large")
+    plt.title("HalfCheetah-v5", fontsize="x-large")
+    plt.gca().spines[['top', 'right']].set_visible(False)
     plt.savefig("./rewards.png", dpi=200, bbox_inches="tight")
     plt.clf()
 
@@ -158,5 +159,7 @@ def main():
 
     return all_losses, all_rewards
 
-
-main()
+with open("./rewards.pkl", 'rb') as in_file:
+    all_rewards = pickle.load(in_file)
+plot_rewards(all_rewards, 1000, 5)
+# main()
